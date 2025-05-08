@@ -1,0 +1,33 @@
+name: SonarQube Scan (.NET Backend)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-analyze:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Install SonarScanner for .NET
+      run: |
+        dotnet tool install --global dotnet-sonarscanner
+        echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+    - name: Run SonarQube Scanner
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      run: |
+        cd backend
+        dotnet sonarscanner begin /k:"my-backend" /d:sonar.login="$SONAR_TOKEN" /d:sonar.host.url="$SONAR_HOST_URL"
+        dotnet build
+        dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN"
