@@ -1,0 +1,38 @@
+name: Deploy Angular Frontend to Azure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build Angular app
+        run: |
+          cd frontend
+          npm run build -- --configuration=production
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: app-angular-frontend
+          publish-profile: ${{ secrets.AZURE_CREDENTIALS_FE }}
+          package: frontend/dist/frontend

@@ -1,0 +1,43 @@
+name: Deploy .NET Backend to Azure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Restore dependencies
+        run: |
+          cd backend
+          dotnet restore
+
+      - name: Build .NET app
+        run: |
+          cd backend
+          dotnet build --configuration Release --no-restore
+
+      - name: Publish app
+        run: |
+          cd backend
+          dotnet publish --configuration Release --output publish_output
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: app-dotnet-backend
+          publish-profile: ${{ secrets.AZURE_CREDENTIALS_BE }}
+          package: backend/publish_output
