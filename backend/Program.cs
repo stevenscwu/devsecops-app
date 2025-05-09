@@ -12,6 +12,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapGet("/", () => "Hello World!");
+app.MapGet("/", () => "Hello World from Steven!  -v1");
 
 app.Run();
