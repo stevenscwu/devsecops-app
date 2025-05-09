@@ -1,0 +1,68 @@
+name: Summarize SonarQube Scan with GPT-4
+
+on:
+  workflow_run:
+    workflows: ["SonarQube Scan (.NET Backend)", "frontend-sonarqube-scan"]
+    types:
+      - completed
+
+jobs:
+  summarize-findings:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download report artifact from previous workflow
+        uses: actions/download-artifact@v3
+        with:
+          name: sonar-report
+          path: reports
+
+      - name: Install OpenAI SDK
+        run: pip install openai
+
+      - name: Run GPT-4 Security Summary
+        env:
+          OPENAI_API_BASE: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+          OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+        run: |
+          python3 <<EOF
+          import os
+          import openai
+          import json
+
+          openai.api_type = "azure"
+          openai.api_base = os.environ["OPENAI_API_BASE"]
+          openai.api_key = os.environ["OPENAI_API_KEY"]
+          openai.api_version = "2023-05-15"
+
+          with open("reports/sonar-report.json") as f:
+              issues = json.load(f)["issues"]
+
+          prompt = f"""You are a security expert. Analyze this SonarQube issue list. Prioritize critical vulnerabilities and give a short summary with fixes.
+
+          {json.dumps(issues[:10], indent=2)}"""
+
+          response = openai.ChatCompletion.create(
+              engine=os.environ["OPENAI_DEPLOYMENT"],
+              messages=[
+                  {"role": "system", "content": "You are a secure software auditor."},
+                  {"role": "user", "content": prompt}
+              ],
+              temperature=0.3,
+              max_tokens=800
+          )
+
+          print("\n🧠 GPT-4 Security Summary:\n")
+          print(response["choices"][0]["message"]["content"])
+
+          with open("summary.txt", "w") as out:
+              out.write(response["choices"][0]["message"]["content"])
+          EOF
+
+      - name: Upload GPT-4 Summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: gpt4-summary
+          path: summary.txt

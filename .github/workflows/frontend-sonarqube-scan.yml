@@ -36,11 +36,27 @@ jobs:
       - name: Run SonarQube Scanner for Angular
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           cd frontend
           npx sonar-scanner \
             -Dsonar.projectKey=my-frontend \
             -Dsonar.sources=src \
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN \
             -Dsonar.typescript.tsconfigPath=tsconfig.json
+
+      - name: Export frontend SonarQube issues
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          mkdir -p reports
+          curl -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/issues/search?componentKeys=my-frontend&ps=500" \
+            -o reports/sonar-report.json
+
+      - name: Upload SonarQube report
+        uses: actions/upload-artifact@v3
+        with:
+          name: sonar-report
+          path: reports/sonar-report.json

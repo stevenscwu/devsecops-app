@@ -14,25 +14,40 @@ jobs:
   build-and-analyze:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '8.0.x'
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
 
-    - name: Install SonarScanner
-      run: |
-        dotnet tool install --global dotnet-sonarscanner
-        echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+      - name: Install SonarScanner
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
-    - name: Run SonarQube Scanner
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      run: |
-        cd backend
-        dotnet sonarscanner begin /k:"my-backend" /d:sonar.login="$SONAR_TOKEN" /d:sonar.host.url="$SONAR_HOST_URL"
-        dotnet build
-        dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN"
+      - name: Run SonarQube Scanner
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          cd backend
+          dotnet sonarscanner begin /k:"my-backend" /d:sonar.login="$SONAR_TOKEN" /d:sonar.host.url="$SONAR_HOST_URL"
+          dotnet build
+          dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN"
+
+      - name: Export backend SonarQube issues
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          mkdir -p reports
+          curl -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/issues/search?componentKeys=my-backend&ps=500" \
+            -o reports/sonar-report.json
+
+      - name: Upload SonarQube report
+        uses: actions/upload-artifact@v3
+        with:
+          name: sonar-report
+          path: reports/sonar-report.json
