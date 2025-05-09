@@ -2,43 +2,45 @@ name: frontend-sonarqube-scan
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - 'frontend/**'
   pull_request:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - 'frontend/**'
 
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-    - name: Install dependencies
-      run: |
-        cd frontend
-        npm install
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm install
 
-    - name: Build Angular project
-      run: |
-        cd frontend
-        npm run build
+      - name: Build Angular project
+        run: |
+          cd frontend
+          npm run build
 
-    - name: Run SonarQube Scanner for Angular
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: |
-        cd frontend
-        npx sonar-scanner \
-          -Dsonar.projectKey=my-frontend \
-          -Dsonar.sources=src \
-          -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-          -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
-          -Dsonar.typescript.tsconfigPath=tsconfig.json
+      - name: Run SonarQube Scanner for Angular
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          cd frontend
+          npx sonar-scanner \
+            -Dsonar.projectKey=my-frontend \
+            -Dsonar.sources=src \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.typescript.tsconfigPath=tsconfig.json

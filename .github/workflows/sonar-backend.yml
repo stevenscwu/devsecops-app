@@ -2,8 +2,13 @@ name: SonarQube Scan (.NET Backend)
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - 'backend/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
 
 jobs:
   build-and-analyze:
@@ -17,7 +22,7 @@ jobs:
       with:
         dotnet-version: '8.0.x'
 
-    - name: Install SonarScanner for .NET
+    - name: Install SonarScanner
       run: |
         dotnet tool install --global dotnet-sonarscanner
         echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
