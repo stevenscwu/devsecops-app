@@ -12,6 +12,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapGet("/", () => "Hello World from Steven Wu!  -v3");
+app.MapGet("/", () => "Hello World from Steven Wu!  -v1.1");
 
 app.Run();
