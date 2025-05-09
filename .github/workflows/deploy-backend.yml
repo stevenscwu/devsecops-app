@@ -1,8 +1,3 @@
-- name: 'Login via Azure CLI'
-  uses: azure/login@v1
-  with:
-    creds: ${{ secrets.AZURE_CREDENTIALS }}
-
 name: Deploy .NET Backend to Azure
 
 on:
@@ -40,9 +35,13 @@ jobs:
           cd backend
           dotnet publish --configuration Release --output publish_output
 
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v2
         with:
           app-name: app-dotnet-backend
-          publish-profile: ${{ secrets.AZURE_CREDENTIALS_BE }}
           package: backend/publish_output
