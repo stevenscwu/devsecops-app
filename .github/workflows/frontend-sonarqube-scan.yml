@@ -1,15 +1,10 @@
 name: Frontend SAST Scan
 
 on:
-  push:
-    branches: [main]
-    paths: ['frontend/**']
-  pull_request:
-    branches: [main]
-    paths: ['frontend/**']
+  workflow_call:
 
 jobs:
-  frontend-scan:
+  frontend-sast:
     runs-on: ubuntu-latest
 
     steps:

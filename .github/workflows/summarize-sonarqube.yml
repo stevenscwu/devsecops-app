@@ -1,7 +1,7 @@
-name: Summarize SonarQube Issues with GPT-4
+name: Summarize SonarQube Reports with GPT-4
 
 on:
-  workflow_dispatch:
+  workflow_call:
 
 jobs:
   summarize:
