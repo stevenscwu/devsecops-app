@@ -1,68 +1,59 @@
-name: Summarize SonarQube Scan with GPT-4
+name: SonarQube Scan + GPT-4 Summarize (Clean)
 
 on:
-  workflow_run:
-    workflows: ["SonarQube Scan (.NET Backend)", "frontend-sonarqube-scan"]
-    types:
-      - completed
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*'
 
 jobs:
-  summarize-findings:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+  sonarqube-genai:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download report artifact from previous workflow
-        uses: actions/download-artifact@v3
-        with:
-          name: sonar-report
-          path: reports
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Install OpenAI SDK
+      - name: Install OpenAI Python SDK
         run: pip install openai
 
-      - name: Run GPT-4 Security Summary
+      - name: Run GPT-4 Summary on SonarQube Report
         env:
-          OPENAI_API_BASE: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+          OPENAI_API_BASE: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
         run: |
           python3 <<EOF
-          import os
           import openai
+          import os
           import json
 
-          openai.api_type = "azure"
-          openai.api_base = os.environ["OPENAI_API_BASE"]
-          openai.api_key = os.environ["OPENAI_API_KEY"]
-          openai.api_version = "2023-05-15"
+          # New Client usage (openai v1.0+)
+          client = openai.AzureOpenAI(
+              api_key=os.environ["OPENAI_API_KEY"],
+              azure_endpoint=os.environ["OPENAI_API_BASE"],
+              api_version="2023-05-15"
+          )
 
+          # Read dummy report (adjust path if needed)
           with open("reports/sonar-report.json") as f:
-              issues = json.load(f)["issues"]
+              issues = json.load(f).get("issues", [])
 
-          prompt = f"""You are a security expert. Analyze this SonarQube issue list. Prioritize critical vulnerabilities and give a short summary with fixes.
+          prompt = f"""Summarize this SonarQube report. Focus on critical vulnerabilities, suggest best practices and possible fixes.
 
           {json.dumps(issues[:10], indent=2)}"""
 
-          response = openai.ChatCompletion.create(
-              engine=os.environ["OPENAI_DEPLOYMENT"],
+          completion = client.chat.completions.create(
+              model=os.environ["OPENAI_DEPLOYMENT"],
               messages=[
-                  {"role": "system", "content": "You are a secure software auditor."},
+                  {"role": "system", "content": "You are a senior secure code reviewer."},
                   {"role": "user", "content": prompt}
               ],
               temperature=0.3,
-              max_tokens=800
+              max_tokens=1000
           )
 
-          print("\n🧠 GPT-4 Security Summary:\n")
-          print(response["choices"][0]["message"]["content"])
-
-          with open("summary.txt", "w") as out:
-              out.write(response["choices"][0]["message"]["content"])
+          print("\n✅ GPT-4 Summary:\n")
+          print(completion.choices[0].message.content)
           EOF
-
-      - name: Upload GPT-4 Summary
-        uses: actions/upload-artifact@v3
-        with:
-          name: gpt4-summary
-          path: summary.txt
