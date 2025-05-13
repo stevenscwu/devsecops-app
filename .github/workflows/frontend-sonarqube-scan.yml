@@ -1,62 +1,36 @@
-name: frontend-sonarqube-scan
+name: Frontend SAST Scan
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'frontend/**'
+    paths: ['frontend/**']
   pull_request:
     branches: [main]
-    paths:
-      - 'frontend/**'
+    paths: ['frontend/**']
 
 jobs:
-  build-and-scan:
+  frontend-scan:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: |
+      - run: |
           cd frontend
-          npm install
-
-      - name: Build Angular project
-        run: |
-          cd frontend
+          npm ci
           npm run build
-
-      - name: Run SonarQube Scanner for Angular
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          cd frontend
-          npx sonar-scanner \
-            -Dsonar.projectKey=my-frontend \
-            -Dsonar.sources=src \
-            -Dsonar.host.url=$SONAR_HOST_URL \
-            -Dsonar.login=$SONAR_TOKEN \
-            -Dsonar.typescript.tsconfigPath=tsconfig.json
-
-      - name: Export frontend SonarQube issues
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
           mkdir -p reports
-          curl -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/issues/search?componentKeys=my-frontend&ps=500" \
-            -o reports/sonar-report.json
+          npx sonar-scanner -Dsonar.projectKey=my-frontend -Dsonar.sources=src -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_TOKEN
+          curl -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/issues/search?componentKeys=my-frontend&ps=500" -o reports/sonar-report.json
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-      - name: Upload SonarQube report
-        uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v3
         with:
-          name: sonar-report
+          name: sonar-report-frontend
           path: reports/sonar-report.json

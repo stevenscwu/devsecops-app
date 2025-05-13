@@ -1,59 +1,48 @@
-name: SonarQube Scan + GPT-4 Summarize (Clean)
+name: Summarize SonarQube Issues with GPT-4
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '**/*'
+  workflow_dispatch:
 
 jobs:
-  sonarqube-genai:
+  summarize:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        report: [sonar-report-backend, sonar-report-frontend]
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/download-artifact@v3
+        with:
+          name: ${{ matrix.report }}
+          path: reports
 
-      - name: Install OpenAI Python SDK
-        run: pip install openai
+      - run: pip install openai
 
-      - name: Run GPT-4 Summary on SonarQube Report
-        env:
-          OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
-          OPENAI_API_BASE: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+      - name: Summarize report using GPT-4 (Azure OpenAI)
         run: |
-          python3 <<EOF
-          import openai
-          import os
-          import json
-
-          # New Client usage (openai v1.0+)
+          import openai, os, json
           client = openai.AzureOpenAI(
-              api_key=os.environ["OPENAI_API_KEY"],
-              azure_endpoint=os.environ["OPENAI_API_BASE"],
+              api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+              azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
               api_version="2023-05-15"
           )
-
-          # Read dummy report (adjust path if needed)
-          with open("reports/sonar-report.json") as f:
+          with open('reports/sonar-report.json') as f:
               issues = json.load(f).get("issues", [])
-
-          prompt = f"""Summarize this SonarQube report. Focus on critical vulnerabilities, suggest best practices and possible fixes.
+          prompt = f"""You are a security expert. Analyze this SonarQube scan report and list the 5 most critical security issues with suggestions.
 
           {json.dumps(issues[:10], indent=2)}"""
-
-          completion = client.chat.completions.create(
-              model=os.environ["OPENAI_DEPLOYMENT"],
+          response = client.chat.completions.create(
+              model=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
               messages=[
-                  {"role": "system", "content": "You are a senior secure code reviewer."},
+                  {"role": "system", "content": "You are a senior code security reviewer."},
                   {"role": "user", "content": prompt}
               ],
               temperature=0.3,
               max_tokens=1000
           )
-
-          print("\n✅ GPT-4 Summary:\n")
-          print(completion.choices[0].message.content)
-          EOF
+          print(f"\n✅ GPT-4 Summary for {os.getenv('GITHUB_WORKFLOW')}:\n{response.choices[0].message.content}")
+        env:
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+        shell: python
