@@ -1,0 +1,76 @@
+name: Clean SonarQube Scan + GPT-4 Summary
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*'
+
+jobs:
+  sonarqube-and-genai:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run SonarQube Scanner (.NET Example)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet sonarscanner begin /k:"my-backend" /d:sonar.login="$SONAR_TOKEN" /d:sonar.host.url="$SONAR_HOST_URL"
+          dotnet build
+          dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN"
+
+      - name: Export SonarQube Issues Report
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          mkdir -p reports
+          curl -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/issues/search?componentKeys=my-backend&ps=500" \
+            -o reports/sonar-report.json
+
+      - name: Install OpenAI Python SDK
+        run: pip install openai
+
+      - name: GPT-4 Summary of SonarQube Report
+        env:
+          OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+          OPENAI_API_BASE: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+        run: |
+          python3 <<EOF
+          import openai
+          import os
+          import json
+
+          openai.api_type = "azure"
+          openai.api_base = os.environ["OPENAI_API_BASE"]
+          openai.api_key = os.environ["OPENAI_API_KEY"]
+          openai.api_version = "2023-05-15"
+
+          with open("reports/sonar-report.json") as f:
+              issues = json.load(f).get("issues", [])
+
+          prompt = f"""You are a security expert. Summarize this SonarQube scan and highlight critical vulnerabilities, their severity, and suggest fixes.
+
+          {json.dumps(issues[:10], indent=2)}"""
+
+          response = openai.ChatCompletion.create(
+              engine=os.environ["OPENAI_DEPLOYMENT"],
+              messages=[
+                  {"role": "system", "content": "You are a senior secure code reviewer."},
+                  {"role": "user", "content": prompt}
+              ],
+              temperature=0.3,
+              max_tokens=1000
+          )
+
+          print("\n🧠 GPT-4 Summary:\n")
+          print(response["choices"][0]["message"]["content"])
+          EOF
