@@ -1,0 +1,41 @@
+name: Backend SonarQube Scan
+
+on:
+  push:
+    paths:
+      - 'server/**'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'server/**'
+
+jobs:
+  sonarqube:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore server
+
+      - name: Build
+        run: dotnet build server --no-restore
+
+      - name: Run tests
+        run: dotnet test server --no-restore --verbosity normal
+
+      - name: Run SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@master
+        with:
+          projectBaseDir: server
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
