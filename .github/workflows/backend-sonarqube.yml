@@ -1,45 +1,36 @@
-name: Backend SonarQube Scan
+name: Backend SonarQube Scan and Export Issues
 
 on:
   push:
-    paths:
-      - 'server/backend/**'
     branches:
       - main
-  pull_request:
-    paths:
-      - 'server/backend/**'
+  workflow_dispatch:
 
 jobs:
-  sonarqube:
+  sonar_backend_scan:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Setup .NET SDK
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '8.0.x'  # Adjust to your backend target framework
+      - name: Run SonarQube Scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet build
+          dotnet sonarscanner begin /k:"backend" /d:sonar.login=$SONAR_TOKEN /d:sonar.host.url="http://13.89.226.182:9000"
+          dotnet build
+          dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
 
-    - name: Install dependencies
-      run: dotnet restore ./server/backend
+      - name: Export SonarQube Issues to JSON
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          curl -u $SONAR_TOKEN: "http://13.89.226.182:9000/api/issues/search?componentKeys=backend" -o sonar_issues.json
+          ls -l sonar_issues.json
 
-    - name: Build project
-      run: dotnet build --no-restore ./server/backend
-
-    - name: SonarQube scan begin
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: |
-        dotnet tool install --global dotnet-sonarscanner
-        dotnet sonarscanner begin /k:"backend" /d:sonar.host.url="http://13.89.226.182:9000" /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
-
-    - name: Build for analysis
-      run: dotnet build ./server/backend
-
-    - name: SonarQube scan end
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+      - name: Upload SonarQube Issues as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-sonar-issues
+          path: sonar_issues.json
