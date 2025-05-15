@@ -1,0 +1,45 @@
+name: Backend SonarQube Scan
+
+on:
+  push:
+    paths:
+      - 'server/backend/**'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'server/backend/**'
+
+jobs:
+  sonarqube:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'  # Adjust to your backend target framework
+
+    - name: Install dependencies
+      run: dotnet restore ./server/backend
+
+    - name: Build project
+      run: dotnet build --no-restore ./server/backend
+
+    - name: SonarQube scan begin
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        dotnet tool install --global dotnet-sonarscanner
+        dotnet sonarscanner begin /k:"backend" /d:sonar.host.url="http://13.89.226.182:9000" /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+
+    - name: Build for analysis
+      run: dotnet build ./server/backend
+
+    - name: SonarQube scan end
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
