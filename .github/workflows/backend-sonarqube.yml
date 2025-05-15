@@ -44,9 +44,11 @@ jobs:
         run: |
           pip install requests jq
 
-          issues_content=$(cat sonar_issues.json | jq -c .)
+          # Read the sonar_issues.json as compact JSON
+          issues_content=$(jq -c . sonar_issues.json)
 
-          read -r -d '' PROMPT << EOM
+          # Create prompt safely in a file
+          cat << EOF > prompt.txt
 I have the following SonarQube issues report in JSON format:
 $issues_content
 
@@ -56,15 +58,16 @@ Please help me analyze it and provide:
 3. A breakdown by issue type (BUG, VULNERABILITY, CODE_SMELL).
 4. The top 5 most common rules violated, along with their descriptions if available.
 5. Any obvious hotspots or files that have the highest concentration of issues.
-EOM
+EOF
 
+          # Call Azure OpenAI GPT-4 API
           curl -s -X POST "$AZURE_OPENAI_ENDPOINT/openai/deployments/$AZURE_OPENAI_DEPLOYMENT/chat/completions?api-version=2023-07-01-preview" \
           -H "Content-Type: application/json" \
           -H "api-key: $AZURE_OPENAI_API_KEY" \
           -d "{
             \"messages\": [
               {\"role\": \"system\", \"content\": \"You are an AI assistant specialized in analyzing SonarQube reports.\"},
-              {\"role\": \"user\", \"content\": \"$PROMPT\"}
+              {\"role\": \"user\", \"content\": \"$(cat prompt.txt | sed 's/"/\\"/g')\"}
             ],
             \"max_tokens\": 1500,
             \"temperature\": 0
