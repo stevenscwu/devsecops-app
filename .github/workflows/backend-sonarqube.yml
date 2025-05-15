@@ -30,7 +30,7 @@ jobs:
           ls -l sonar_issues.json
 
       - name: Upload SonarQube Issues as Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: backend-sonar-issues
           path: sonar_issues.json
