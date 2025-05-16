@@ -30,7 +30,8 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          curl -s -u $SONAR_TOKEN: "http://13.89.226.182:9000/api/issues/search?componentKeys=backend" -o sonar_issues.json
+          curl -s -u $SONAR_TOKEN: "http://13.89.226.182:9000/api/issues/search?componentKeys=backend" \
+          -o sonar_issues.json
           cat sonar_issues.json
 
       - name: Upload SonarQube issues artifact
@@ -45,7 +46,6 @@ jobs:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
         run: |
-          # Install dependencies explicitly
           pip install jq
 
           jq -c . sonar_issues.json > compact.json
@@ -62,10 +62,10 @@ jobs:
             echo "5. Hotspot files with most issues."
           } > prompt.txt
 
-          jq -Rn --slurpfile prompt prompt.txt '{
+          jq -Rn --rawfile prompt prompt.txt '{
             messages: [
               {role:"system", content:"You are an AI specialized in analyzing SonarQube reports."},
-              {role:"user", content:$prompt[0]}
+              {role:"user", content:$prompt}
             ],
             max_tokens:1500,
             temperature:0
@@ -78,7 +78,6 @@ jobs:
             -d @payload.json \
             > openai_raw_response.txt
 
-          # Split body and status
           sed -n '$!p' openai_raw_response.txt > openai_response.json
           STATUS=$(tail -n1 openai_raw_response.txt | cut -d':' -f2)
 
