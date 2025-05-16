@@ -1,4 +1,4 @@
-name: Backend SonarQube Scan + AI Summary
+name: Backend SonarQube Scan and GPT-4 Summary
 
 on:
   push:
@@ -9,13 +9,13 @@ jobs:
   sonar_backend_scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Install SonarScanner for .NET
         run: dotnet tool install --global dotnet-sonarscanner
 
-      - name: Run SonarQube Scan
+      - name: Run SonarQube scan
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
@@ -26,61 +26,88 @@ jobs:
           dotnet build
           dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
 
-      - name: Export issues → JSON
+      - name: Export SonarQube issues to JSON
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          curl -s -u $SONAR_TOKEN: \
-            "http://13.89.226.182:9000/api/issues/search?componentKeys=backend" \
-            -o sonar_issues.json
+          curl -s -u $SONAR_TOKEN: "http://13.89.226.182:9000/api/issues/search?componentKeys=backend" -o sonar_issues.json
+          cat sonar_issues.json
 
-      - name: Upload raw JSON
+      - name: Upload SonarQube issues artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-sonar-issues
           path: sonar_issues.json
 
-      - name: Summarise with Azure GPT-4
+      - name: Summarize issues using Azure GPT-4
         env:
-          AZURE_OPENAI_ENDPOINT:   ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          AZURE_OPENAI_API_KEY:    ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
         run: |
+          # Install dependencies explicitly
+          pip install jq
+
           jq -c . sonar_issues.json > compact.json
 
-          # Build prompt
-          printf "I have the following SonarQube issues report in JSON format:\n%s\n\n" \
-                 "$(cat compact.json)" > prompt.txt
-          printf "%s\n" \
-                 "Please help me analyse it and provide:" \
-                 "1. The total number of issues." \
-                 "2. A breakdown by severity." \
-                 "3. A breakdown by issue type." \
-                 "4. The top 5 most common rules violated." \
-                 "5. Hotspot files with most issues." \
-                 >> prompt.txt
+          {
+            echo "I have the following SonarQube issues report in JSON format:"
+            cat compact.json
+            echo
+            echo "Please help me analyze it and provide:"
+            echo "1. Total number of issues."
+            echo "2. Breakdown by severity (BLOCKER, CRITICAL, MAJOR, MINOR, INFO)."
+            echo "3. Breakdown by issue type (BUG, VULNERABILITY, CODE_SMELL)."
+            echo "4. Top 5 most common rules violated with descriptions if available."
+            echo "5. Hotspot files with most issues."
+          } > prompt.txt
 
-          # Escape quotes for JSON payload
-          esc_prompt=$(sed 's/"/\\"/g' prompt.txt)
+          jq -Rn --slurpfile prompt prompt.txt '{
+            messages: [
+              {role:"system", content:"You are an AI specialized in analyzing SonarQube reports."},
+              {role:"user", content:$prompt[0]}
+            ],
+            max_tokens:1500,
+            temperature:0
+          }' > payload.json
 
-          printf '{\n'                              >  payload.json
-          printf '  "messages": [\n'               >> payload.json
-          printf '    { "role": "system", "content": "You are an AI assistant specialised in analysing SonarQube reports." },\n' >> payload.json
-          printf '    { "role": "user",   "content": "%s" }\n' "$esc_prompt" >> payload.json
-          printf '  ],\n  "max_tokens": 1500,\n  "temperature": 0\n}\n' >> payload.json
+          curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+            "$AZURE_OPENAI_ENDPOINT/openai/deployments/$AZURE_OPENAI_DEPLOYMENT/chat/completions?api-version=2023-07-01-preview" \
+            -H "Content-Type: application/json" \
+            -H "api-key: $AZURE_OPENAI_API_KEY" \
+            -d @payload.json \
+            > openai_raw_response.txt
 
-          curl -s -X POST \
-               "$AZURE_OPENAI_ENDPOINT/openai/deployments/$AZURE_OPENAI_DEPLOYMENT/chat/completions?api-version=2023-07-01-preview" \
-               -H "Content-Type: application/json" \
-               -H "api-key: $AZURE_OPENAI_API_KEY" \
-               -d @payload.json \
-          | jq -r '.choices[0].message.content' > sonar_issues_summary.txt
+          # Split body and status
+          sed -n '$!p' openai_raw_response.txt > openai_response.json
+          STATUS=$(tail -n1 openai_raw_response.txt | cut -d':' -f2)
+
+          echo "Azure GPT-4 HTTP Status: $STATUS"
+          cat openai_response.json
+
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Azure OpenAI call failed with status $STATUS"
+            exit 1
+          fi
+
+          jq -r '.choices[0].message.content' openai_response.json > sonar_issues_summary.txt
 
           echo "===== GPT-4 SUMMARY ====="
           cat sonar_issues_summary.txt
 
-      - name: Upload GPT summary
+      - name: Upload GPT-4 summary artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-sonar-issues-summary
           path: sonar_issues_summary.txt
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openai-debug-info
+          path: |
+            prompt.txt
+            payload.json
+            openai_raw_response.txt
+            openai_response.json
