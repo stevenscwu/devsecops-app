@@ -1,5 +1,5 @@
 name: Backend SonarQube Scan and GPT-4 Summary
-true:
+on:
   push:
     branches:
     - main
