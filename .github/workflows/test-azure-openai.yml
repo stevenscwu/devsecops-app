@@ -1,0 +1,23 @@
+name: Test Azure OpenAI Connection
+
+on:
+  workflow_dispatch:  # Trigger manually from GitHub Actions UI
+
+jobs:
+  test-openai-call:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Azure OpenAI Chat Completion
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+        run: |
+          echo "Testing Azure OpenAI endpoint: $AZURE_OPENAI_ENDPOINT"
+          curl -X POST "$AZURE_OPENAI_ENDPOINT/openai/deployments/$AZURE_OPENAI_DEPLOYMENT/chat/completions?api-version=2024-02-15-preview" \
+            -H "Content-Type: application/json" \
+            -H "api-key: $AZURE_OPENAI_API_KEY" \
+            -d '{
+                  "messages": [{"role": "user", "content": "Hello from GitHub Actions!"}],
+                  "max_tokens": 10
+                }'
