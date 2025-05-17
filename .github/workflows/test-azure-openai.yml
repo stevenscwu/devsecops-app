@@ -1,23 +1,26 @@
-name: Test Azure OpenAI Connection
+name: Test Azure Cognitive Services GPT-4o
 
 on:
-  workflow_dispatch:  # Trigger manually from GitHub Actions UI
+  workflow_dispatch:
 
 jobs:
-  test-openai-call:
+  test-cognitive-gpt-call:
     runs-on: ubuntu-latest
     steps:
-      - name: Test Azure OpenAI Chat Completion
+      - name: Test Azure Cognitive Services Chat Completion
         env:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
         run: |
-          echo "Testing Azure OpenAI endpoint: $AZURE_OPENAI_ENDPOINT"
-          curl -X POST "$AZURE_OPENAI_ENDPOINT/openai/deployments/$AZURE_OPENAI_DEPLOYMENT/chat/completions?api-version=2024-02-15-preview" \
+          echo "Testing Azure Cognitive Services endpoint: $AZURE_OPENAI_ENDPOINT"
+          curl -X POST "$AZURE_OPENAI_ENDPOINT/openai/chat/completions?api-version=2024-03-01-preview" \
             -H "Content-Type: application/json" \
             -H "api-key: $AZURE_OPENAI_API_KEY" \
-            -d '{
-                  "messages": [{"role": "user", "content": "Hello from GitHub Actions!"}],
-                  "max_tokens": 10
-                }'
+            -d "{
+              \"deployment\": \"$AZURE_OPENAI_DEPLOYMENT\",
+              \"messages\": [
+                {\"role\": \"user\", \"content\": \"Hello from GitHub Actions using Cognitive Services format!\"}
+              ],
+              \"max_tokens\": 20
+            }"
