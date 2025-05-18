@@ -1,0 +1,37 @@
+name: Backend SonarQube Scan and Export Issues
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  sonar_backend_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install SonarScanner for .NET
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Run SonarQube Scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet sonarscanner begin /k:"backend" /d:sonar.login=$SONAR_TOKEN /d:sonar.host.url="http://13.89.226.182:9000"
+          dotnet build
+          dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
+
+      - name: Export SonarQube Issues to JSON
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          curl -u $SONAR_TOKEN: "http://13.89.226.182:9000/api/issues/search?componentKeys=backend" -o sonar_issues.json
+
+      - name: Upload SonarQube Issues as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-sonar-issues
+          path: sonar_issues.json
