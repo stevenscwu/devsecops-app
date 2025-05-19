@@ -1,55 +1,64 @@
-name: Full SonarQube Scan and GPT-4 Summary
+name: Fullstack SonarQube + GPT-4 Summary
 
 on:
   workflow_dispatch:
 
 jobs:
-  scan_and_analyze:
+  fullstack_scan:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🧾 Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: ⚙️ Setup .NET SDK
+      - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: 📦 Install dotnet-sonarscanner
+      - name: Install SonarScanner for .NET
         run: dotnet tool install --global dotnet-sonarscanner
 
-      - name: 🔍 Run SonarQube Scan
+      - name: Run Backend SonarQube Scan
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           export PATH="$PATH:/home/runner/.dotnet/tools"
           dotnet sonarscanner begin /k:"backend" /d:sonar.host.url="http://13.89.226.182:9000" /d:sonar.login=$SONAR_TOKEN
-          dotnet build
+          dotnet build server/backend/backend.csproj
           dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
 
-      - name: 📤 Export SonarQube Issues to JSON
+      - name: Run Frontend Lint (Angular)
+        working-directory: client
+        run: |
+          npm ci
+          npm run lint || true
+
+      - name: Export Backend Sonar Issues to JSON
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           curl -s -u $SONAR_TOKEN: "http://13.89.226.182:9000/api/issues/search?componentKeys=backend" \
-          -H "Accept: application/json" -o sonar_issues.json
+          -H "Accept: application/json" -o sonar_backend_issues.json
 
-      - name: 🤖 Call Azure Function with GPT-4
+      - name: Combine Frontend/Backend Issues (mock frontend)
+        run: |
+          cp sonar_backend_issues.json sonar_issues.json
+
+      - name: Call Azure GPT Summarizer
         run: |
           curl -s -X POST "${{ secrets.AZURE_FN_ENDPOINT }}" \
             -H "Content-Type: application/json" \
             --data-binary @sonar_issues.json > summary.md
 
-      - name: 📎 Upload SonarQube Report JSON
+      - name: Upload JSON report
         uses: actions/upload-artifact@v4
         with:
           name: sonar-issues
           path: sonar_issues.json
 
-      - name: 📎 Upload GPT Summary Markdown
+      - name: Upload GPT Summary
         uses: actions/upload-artifact@v4
         with:
           name: gpt-summary
           path: summary.md
-
