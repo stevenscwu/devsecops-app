@@ -28,12 +28,6 @@ jobs:
           dotnet build server/backend/backend.csproj
           dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
 
-      - name: Run Frontend Lint (Angular)
-        working-directory: client
-        run: |
-          npm ci
-          npm run lint || true
-
       - name: Export Backend Sonar Issues to JSON
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -41,20 +35,30 @@ jobs:
           curl -s -u $SONAR_TOKEN: "http://13.89.226.182:9000/api/issues/search?componentKeys=backend" \
           -H "Accept: application/json" -o sonar_backend_issues.json
 
-      - name: Combine Frontend/Backend Issues (mock frontend)
+      - name: Run Angular Lint and Save Output
+        working-directory: client
         run: |
-          cp sonar_backend_issues.json sonar_issues.json
+          npm ci
+          npx eslint . --format json -o ../frontend_lint.json || echo "Linting completed with warnings"
 
-      - name: Call Azure GPT Summarizer
+      - name: Merge Frontend and Backend Issues
+        run: |
+          echo '{ "backend_issues": ' > sonar_issues.json
+          cat sonar_backend_issues.json >> sonar_issues.json
+          echo ', "frontend_issues": ' >> sonar_issues.json
+          cat frontend_lint.json >> sonar_issues.json
+          echo '}' >> sonar_issues.json
+
+      - name: GPT-4 Analysis via Azure Function
         run: |
           curl -s -X POST "${{ secrets.AZURE_FN_ENDPOINT }}" \
             -H "Content-Type: application/json" \
             --data-binary @sonar_issues.json > summary.md
 
-      - name: Upload JSON report
+      - name: Upload Full Report JSON
         uses: actions/upload-artifact@v4
         with:
-          name: sonar-issues
+          name: full-issues
           path: sonar_issues.json
 
       - name: Upload GPT Summary
