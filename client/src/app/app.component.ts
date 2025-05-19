@@ -10,3 +10,5 @@ import { RouterOutlet } from '@angular/router';
 export class AppComponent {
   title = 'frontend';
 }
+console.log("debug info"); // triggers `no-console`
+
