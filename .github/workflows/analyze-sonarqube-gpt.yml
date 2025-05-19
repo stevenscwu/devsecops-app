@@ -12,7 +12,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Download sonar-report.json
+      - name: Download SonarQube Report
         uses: actions/download-artifact@v4
         with:
           name: sonar-report
@@ -22,7 +22,7 @@ jobs:
         run: |
           curl -s -X POST "${{ secrets.AZURE_FN_ENDPOINT }}" \
                -H "Content-Type: application/json" \
-               --data-binary @report/sonar-report.json > summary.md
+               --data-binary @report/sonar_issues.json > summary.md
 
       - name: Upload GPT Summary as Artifact
         uses: actions/upload-artifact@v4
