@@ -1,0 +1,56 @@
+name: Scan and Analyze SonarQube Report with GPT-4
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scan_and_analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install SonarScanner for .NET
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Run SonarQube Scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          export PATH="$PATH:/home/runner/.dotnet/tools"
+          dotnet sonarscanner begin /k:"backend" /d:sonar.login=$SONAR_TOKEN /d:sonar.host.url="http://13.89.226.182:9000"
+          dotnet build
+          dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
+
+      - name: Export SonarQube Issues to JSON
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          curl -s -u $SONAR_TOKEN: \
+            "http://13.89.226.182:9000/api/issues/search?componentKeys=backend" \
+            -H "Accept: application/json" \
+            -o sonar_issues.json
+
+      - name: Analyze with Azure GPT-4
+        run: |
+          curl -s -X POST "${{ secrets.AZURE_FN_ENDPOINT }}" \
+            -H "Content-Type: application/json" \
+            --data-binary @sonar_issues.json > summary.md
+
+      - name: Upload SonarQube JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonar-issues
+          path: sonar_issues.json
+
+      - name: Upload GPT Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonar-gpt-summary
+          path: summary.md
