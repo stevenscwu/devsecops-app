@@ -1,1 +1,74 @@
-# GitHub Actions YAML for fullstack scanning
+name: Fullstack SonarQube + GPT-4 Summary
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fullstack_scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v3
+
+      - name: ⚙️ Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 📦 Install SonarScanner for .NET
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: 🔍 Run Backend SonarQube Scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          export PATH="$PATH:/home/runner/.dotnet/tools"
+          dotnet sonarscanner begin /k:"backend" /d:sonar.host.url="http://13.89.226.182:9000" /d:sonar.login=$SONAR_TOKEN
+          dotnet build server/backend/backend.csproj
+          dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
+
+      - name: 📤 Export Backend Sonar Issues to JSON
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          curl -s -u $SONAR_TOKEN: "http://13.89.226.182:9000/api/issues/search?componentKeys=backend" \
+          -H "Accept: application/json" -o sonar_backend_issues.json
+
+      - name: 🧪 Run Angular Lint and Save Output
+        working-directory: client
+        run: |
+          npm ci
+          npx eslint "src/app/**/*.ts" --config eslint.config.js --format json -o ../frontend_lint.json || echo "⚠️ ESLint failed, but continuing"
+
+      - name: 🔗 Merge Frontend and Backend Issues (Gracefully)
+        run: |
+          if [ -f frontend_lint.json ]; then
+            echo '{ "backend_issues": ' > sonar_issues.json
+            cat sonar_backend_issues.json >> sonar_issues.json
+            echo ', "frontend_issues": ' >> sonar_issues.json
+            cat frontend_lint.json >> sonar_issues.json
+            echo '}' >> sonar_issues.json
+          else
+            echo "⚠️ Warning: frontend_lint.json not found. Proceeding with backend only."
+            cp sonar_backend_issues.json sonar_issues.json
+          fi
+
+      - name: 🤖 GPT-4 Analysis via Azure Function
+        run: |
+          echo "Sending $(wc -c < sonar_issues.json) bytes to GPT..."
+          curl -s -X POST "${{ secrets.AZURE_FN_ENDPOINT }}" \
+            -H "Content-Type: application/json" \
+            --data-binary @sonar_issues.json > summary.md
+
+      - name: 📦 Upload Full Issue Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonar-issues
+          path: sonar_issues.json
+
+      - name: 📦 Upload GPT Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpt-summary
+          path: summary.md
