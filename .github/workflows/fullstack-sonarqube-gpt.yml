@@ -38,7 +38,7 @@ jobs:
       - name: 🧪 Run Angular Lint and Save Output
         working-directory: client
         run: |
-          npm ci
+          npm install
           npx eslint "src/app/**/*.ts" --config eslint.config.js --format json -o ../frontend_lint.json || echo "⚠️ ESLint failed, but continuing"
 
       - name: 🔗 Merge Frontend and Backend Issues (Gracefully)
