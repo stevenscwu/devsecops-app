@@ -3,53 +3,79 @@ import os
 import openai
 import logging
 import azure.functions as func
+from collections import Counter, defaultdict
+
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("🔹 Azure Function triggered")
 
-    # Step 1: Validate environment variables
     endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
     key = os.environ.get("AZURE_OPENAI_KEY")
     deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
 
     if not endpoint or not key or not deployment:
-        logging.error(f"❌ Missing environment variables: "
-                      f"Endpoint={'set' if endpoint else 'MISSING'}, "
-                      f"Key={'set' if key else 'MISSING'}, "
-                      f"Deployment={'set' if deployment else 'MISSING'}")
-        return func.HttpResponse(
-            "Server misconfiguration: missing Azure OpenAI environment variables.",
-            status_code=500
-        )
+        logging.error("❌ Missing Azure OpenAI environment variables.")
+        return func.HttpResponse("Server misconfiguration.", status_code=500)
 
-    # Step 2: Parse request JSON
     try:
-        sonar_json = req.get_json()
-        logging.info(f"✅ Received JSON with keys: {list(sonar_json.keys())}")
+        data = req.get_json()
     except Exception as e:
-        logging.error(f"❌ Failed to parse JSON: {e}")
+        logging.error(f"❌ Failed to parse input JSON: {e}")
         return func.HttpResponse("Invalid JSON body.", status_code=400)
 
-    issues = sonar_json.get("issues", [])
+    if not data:
+        return func.HttpResponse("No issues found in payload.", status_code=200)
+
+    # Combine issues from both SonarQube and ESLint
+    issues = data.get("backend_issues", {}).get("issues", []) + data.get("frontend_issues", [])
+
     if not issues:
-        logging.warning("⚠️ No issues found in input JSON.")
-        return func.HttpResponse("No issues found in payload.", status_code=400)
+        return func.HttpResponse("No issues to analyze.", status_code=200)
 
-    logging.info(f"🧩 Extracted {len(issues)} issues")
+    # Aggregate data
+    rule_counter = Counter()
+    file_counter = Counter()
+    severity_counter = Counter()
+    sample_messages = []
 
-    # Step 3: Format the GPT prompt
-    summary_text = ""
-    for i, issue in enumerate(issues, 1):
-        msg = issue.get("message", "")
-        file = issue.get("component", "").split(":")[-1]
-        line = issue.get("line", "?")
-        severity = issue.get("severity", "")
-        rule = issue.get("rule", "")
-        summary_text += f"{i}. [{severity}] Line {line} in {file}: {msg} (Rule: {rule})\n"
+    for issue in issues:
+        file = issue.get("component", issue.get("filePath", "unknown")).split(":")[-1]
+        rule = issue.get("rule", issue.get("ruleId", "unknown"))
+        severity = issue.get("severity", issue.get("severity", "UNKNOWN"))
+        msg = issue.get("message", issue.get("message", ""))
 
-    logging.info("📝 Prompt prepared. Preview:\n" + summary_text[:300] + "...")
+        rule_counter[rule] += 1
+        file_counter[file] += 1
+        severity_counter[severity] += 1
 
-    # Step 4: Call Azure OpenAI GPT-4
+        if msg:
+            sample_messages.append(f"{file}: {msg}")
+
+    # Build prompt
+    prompt = f"""
+You are a senior security engineer reviewing static analysis reports.
+
+Please summarize the scan results with the following sections:
+1. Top 5 most common rule violations
+2. Files with the most issues
+3. Severity distribution (blocker, critical, major, minor, info)
+4. Three actionable recommendations to improve code security or maintainability
+5. Sample findings
+
+Rule frequency:
+{json.dumps(rule_counter.most_common(5), indent=2)}
+
+Files with most issues:
+{json.dumps(file_counter.most_common(5), indent=2)}
+
+Severity breakdown:
+{json.dumps(severity_counter, indent=2)}
+
+Sample findings:
+{json.dumps(sample_messages[:5], indent=2)}
+"""
+
+    # GPT-4 call
     try:
         openai.api_type = "azure"
         openai.api_base = endpoint
@@ -59,16 +85,21 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         response = openai.ChatCompletion.create(
             engine=deployment,
             messages=[
-                {"role": "system", "content": "You are a secure code reviewer."},
-                {"role": "user", "content": f"Summarize and prioritize these SonarQube issues:\n{summary_text}"}
+                {
+                    "role": "system",
+                    "content": "You are a helpful and precise security advisor. Output should be markdown."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
             ],
             max_tokens=1000,
             temperature=0.3
         )
 
-        result = response["choices"][0]["message"]["content"]
-        logging.info("✅ GPT-4 responded successfully")
-        return func.HttpResponse(result, status_code=200)
+        summary = response["choices"][0]["message"]["content"]
+        return func.HttpResponse(summary, status_code=200)
 
     except Exception as e:
         logging.error(f"❌ GPT-4 API call failed: {e}")
