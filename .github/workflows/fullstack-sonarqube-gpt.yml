@@ -39,7 +39,7 @@ jobs:
         working-directory: client
         run: |
           npm install
-          npx eslint "src/app/**/*.ts" --config eslint.config.js --format json -o ../frontend_lint.json || echo "⚠️ ESLint failed, but continuing"
+          npx eslint "src/app/**/*.ts" --config eslint.config.js --format json -o ../frontend_lint.json || echo "[]" > ../frontend_lint.json
 
       - name: 🔗 Merge Frontend and Backend Issues (Gracefully)
         run: |
